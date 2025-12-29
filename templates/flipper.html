@@ -1,0 +1,377 @@
+{% extends "base.html" %}
+{% block title %}Flipper Zero Control{% endblock %}
+{% block content %}
+<div class="container mt-4">
+  <h1>Flipper Zero — <span class="muted">Management</span></h1>
+  <div id="monitor" class="card mb-3">
+    <div class="card-body">
+      <style>
+        .typing { border-right: 2px solid var(--accent); animation: blink 1s steps(1) infinite; }
+        @keyframes blink { 50% { opacity: 0 } }
+      </style>
+      <h5 class="panel-title">Real-Time Monitoring</h5>
+      <div id="monitor-body" class="mb-2">
+        <dl class="row mb-0">
+          <dt class="col-sm-3">Port</dt><dd class="col-sm-9" id="monitor-port">—</dd>
+          <dt class="col-sm-3">Info</dt><dd class="col-sm-9 typewriter" id="monitor-info" style="white-space:pre-wrap">—</dd>
+          <dt class="col-sm-3">Uptime</dt><dd class="col-sm-9" id="monitor-uptime">—</dd>
+          <dt class="col-sm-3">Memory</dt><dd class="col-sm-9" id="monitor-memory">—</dd>
+          <dt class="col-sm-3">Last Updated</dt><dd class="col-sm-9" id="monitor-last">—</dd>
+        </dl>
+        <pre id="monitor-raw" class="mt-2 p-2 typewriter" style="display:none;background:#020518;color:#9ff;white-space:pre-wrap"></pre>
+      </div>
+      <div id="connection-status" class="alert" style="background:rgba(0,229,255,0.04);border:1px solid rgba(0,229,255,0.06);color:var(--muted);">Checking connection...</div>
+      <div class="btn-group mt-2" role="group">
+        <button class="btn btn-outline-light" onclick="refreshFlipperMonitor()">Refresh</button>
+        <button class="btn btn-outline-secondary" id="toggle-raw">Show raw</button>
+        <button class="btn btn-outline-secondary" id="toggle-typewriter">Disable typewriter</button>
+      </div>
+
+
+    </div>
+  </div>
+  <div class="card mb-3">
+    <div class="card-body">
+      <h5>Custom Command</h5>
+      <form id="flipper-form">
+        <input type="text" class="form-control" id="command" placeholder="Enter CLI command (e.g., 'info power')">
+        <button type="submit" class="btn btn-success mt-2">Send</button>
+      </form>
+      <pre id="command-output"></pre>
+    </div>
+  </div>
+  <div class="card mb-3">
+    <div class="card-body">
+      <h5>File Explorer</h5>
+      <div class="d-flex mb-2">
+        <input type="text" class="form-control" id="fs-path" value="/ext" placeholder="Path (e.g., /ext)">
+        <div class="dropdown ms-2">
+          <button class="btn btn-outline-light dropdown-toggle" type="button" data-bs-toggle="dropdown">Options</button>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="#" onclick="navigateUp()">Go Up</a></li>
+            <li><a class="dropdown-item" href="#" onclick="refreshFs()">Refresh</a></li>
+            <li><a class="dropdown-item" href="#" onclick="shareCurrentPath()">Share Path</a></li>
+          </ul>
+        </div>
+        <button class="btn btn-primary ms-2" onclick="refreshFs()">List</button>
+      </div>
+      <div id="fs-list" class="p-2" style="background:#020518;color:#9ff;min-height:140px"></div>
+      <div class="mt-3">
+        <input type="text" class="form-control" id="fs-file" placeholder="Select entry from list for actions">
+        <div class="btn-group mt-2">
+          <button class="btn btn-info" onclick="viewFile()">View</button>
+          <button class="btn btn-success" onclick="downloadFile()">Download</button>
+          <button class="btn btn-danger" onclick="deleteFile()">Delete</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal" tabindex="-1" id="fileModal">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content" style="background:#0a0f1a;color:#eee">
+        <div class="modal-header">
+          <h5 class="modal-title" id="fileModalTitle">File Preview</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <pre id="fileModalBody" style="white-space:pre-wrap"></pre>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="button" class="btn btn-success" onclick="downloadFile()">Download</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <h5>Quick Actions</h5>
+      <button class="btn btn-info" onclick="sendQuickCommand('led r 255')">Red LED On</button>
+      <button class="btn btn-info" onclick="sendQuickCommand('vibro 1')">Vibrate</button>
+      <button class="btn btn-info" onclick="sendQuickCommand('power reboot')">Reboot</button>
+      <!-- Add more buttons for common commands -->
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <h5>Sub-GHz Transmission Controls</h5>
+      <p><strong>Warning:</strong> Use legally and responsibly. Check local regulations.</p>
+      
+      <h6>Quick Tests</h6>
+      <button class="btn btn-warning mb-2" onclick="subghzAction('carrier')">Transmit Carrier (433.92 MHz)</button>
+      <button class="btn btn-info mb-2" onclick="subghzAction('static')">Transmit Example Static Code</button>
+      
+      <h6 class="mt-3">Transmit Custom Key (e.g., Princeton)</h6>
+      <form id="custom-key-form">
+        <div class="row">
+          <div class="col"><input type="text" class="form-control" id="key-hex" placeholder="Hex Key (e.g., DEADBEEF)" value="DEADBEEF"></div>
+          <div class="col"><input type="text" class="form-control" id="freq" placeholder="Frequency Hz" value="433920000"></div>
+        </div>
+        <div class="row mt-2">
+          <div class="col"><input type="text" class="form-control" id="te" placeholder="TE us (e.g., 100)" value="100"></div>
+          <div class="col"><input type="text" class="form-control" id="repeat" placeholder="Repeat Count" value="10"></div>
+        </div>
+        <button type="submit" class="btn btn-primary mt-2">Transmit Custom Key</button>
+      </form>
+      
+      <h6 class="mt-3">Transmit from Saved File</h6>
+      <form id="file-tx-form">
+        <div class="row">
+          <div class="col"><input type="text" class="form-control" id="file-path" placeholder="File Path (e.g., /ext/subghz/gate.sub)" value="/ext/subghz/example.sub"></div>
+          <div class="col"><input type="text" class="form-control" id="file-repeat" placeholder="Repeat" value="1"></div>
+        </div>
+        <button type="submit" class="btn btn-success mt-2">Transmit from File</button>
+      </form>
+      
+      <h6 class="mt-3">Simple Raw Transmit (space-separated durations µs)</h6>
+      <form id="raw-tx-form">
+        <input type="text" class="form-control mb-2" id="raw-freq" placeholder="Frequency Hz" value="433920000">
+        <textarea class="form-control mb-2" id="raw-data" rows="3" placeholder="e.g., 500 -500 1000 -1000 500 -500"></textarea>
+        <button type="submit" class="btn btn-danger mt-2">Transmit Raw</button>
+      </form>
+      
+      <pre id="subghz-output"></pre>
+    </div>
+  </div>
+</div>
+<script>
+function escapeHtml(s) {
+  return String(s).replace(/[&<>\"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+let typewriterEnabled = true;
+function typewriterPrint(el, text, speed=12) {
+  if (!el) return;
+  if (!typewriterEnabled) { el.textContent = text; el.classList.remove('typing'); return; }
+  if (el._tw_timer) { clearInterval(el._tw_timer); el._tw_timer = null; }
+  el.textContent = '';
+  el.classList.add('typing');
+  let i = 0;
+  el._tw_timer = setInterval(() => {
+    el.textContent += text.charAt(i);
+    i++;
+    if (i >= text.length) { clearInterval(el._tw_timer); el._tw_timer = null; el.classList.remove('typing'); }
+  }, speed);
+}
+
+function refreshFlipperMonitor() {
+  fetch('/flipper_monitor').then(res => res.json()).then(data => {
+    const portEl = document.getElementById('monitor-port');
+    const infoEl = document.getElementById('monitor-info');
+    const uptimeEl = document.getElementById('monitor-uptime');
+    const memoryEl = document.getElementById('monitor-memory');
+    const lastEl = document.getElementById('monitor-last');
+    const rawEl = document.getElementById('monitor-raw');
+
+    if (!data || !data.connected) {
+      portEl.textContent = '—';
+      const err = data && data.error ? data.error : 'Not connected';
+      typewriterPrint(infoEl, err);
+      uptimeEl.textContent = '—';
+      memoryEl.textContent = '—';
+      lastEl.textContent = new Date().toISOString();
+      typewriterPrint(rawEl, data && data.raw ? JSON.stringify(data.raw, null, 2) : '');
+      return;
+    }
+
+    portEl.textContent = data.port || '—';
+    const infoText = data.info && data.info.length ? data.info.join('\n') : '—';
+    typewriterPrint(infoEl, infoText);
+    uptimeEl.textContent = data.uptime || '—';
+    memoryEl.textContent = data.memory || '—';
+    lastEl.textContent = data.last_updated || new Date().toISOString();
+    typewriterPrint(rawEl, JSON.stringify(data.raw || {}, null, 2));
+  }).catch(err => {
+    document.getElementById('connection-status').className = 'alert alert-danger';
+    document.getElementById('connection-status').textContent = 'Error contacting server';
+  });
+}
+function sendQuickCommand(cmd) {
+  fetch('/flipper_command', {method: 'POST', body: new URLSearchParams({command: cmd})})
+    .then(res => res.json()).then(data => {
+      const out = data.result || data.error;
+      typewriterPrint(document.getElementById('command-output'), out);
+    });
+}
+document.getElementById('flipper-form').addEventListener('submit', e => {
+  e.preventDefault();
+  sendQuickCommand(document.getElementById('command').value);
+});
+
+// Toggle raw and typewriter buttons
+if (document.getElementById('toggle-raw')) {
+  document.getElementById('toggle-raw').addEventListener('click', () => {
+    const el = document.getElementById('monitor-raw');
+    const btn = document.getElementById('toggle-raw');
+    if (el.style.display === 'none' || !el.style.display) {
+      el.style.display = 'block'; btn.textContent = 'Hide raw';
+    } else { el.style.display = 'none'; btn.textContent = 'Show raw'; }
+  });
+}
+if (document.getElementById('toggle-typewriter')) {
+  document.getElementById('toggle-typewriter').addEventListener('click', () => {
+    const btn = document.getElementById('toggle-typewriter');
+    typewriterEnabled = !typewriterEnabled;
+    btn.textContent = typewriterEnabled ? 'Disable typewriter' : 'Enable typewriter';
+  });
+}
+function updateConnectionStatus() {
+  fetch('/flipper_monitor').then(res => res.json()).then(data => {
+    if (data && data.connected) {
+      document.getElementById('connection-status').className = 'alert alert-success';
+      document.getElementById('connection-status').textContent = 'Flipper Zero connected';
+    } else {
+      document.getElementById('connection-status').className = 'alert alert-danger';
+      document.getElementById('connection-status').textContent = 'Flipper Zero disconnected';
+    }
+    // Update the structured monitor fields
+    try { refreshFlipperMonitor(); } catch (e) { /* ignore */ }
+  }).catch(err => {
+    document.getElementById('connection-status').className = 'alert alert-danger';
+    document.getElementById('connection-status').textContent = 'Error contacting server';
+  });
+}
+
+// Toggle raw output visibility
+if (document.getElementById('toggle-raw')) {
+  document.getElementById('toggle-raw').addEventListener('click', () => {
+    const el = document.getElementById('monitor-raw');
+    const btn = document.getElementById('toggle-raw');
+    if (el.style.display === 'none' || !el.style.display) {
+      el.style.display = 'block'; btn.textContent = 'Hide raw';
+    } else { el.style.display = 'none'; btn.textContent = 'Show raw'; }
+  });
+}
+function showError(message) {
+  const el = document.getElementById('subghz-output');
+  el.className = 'bg-danger text-white p-2';
+  typewriterPrint(el, message);
+}
+function showSuccess(message) {
+  const el = document.getElementById('subghz-output');
+  el.className = 'bg-success text-white p-2';
+  typewriterPrint(el, message);
+}
+function subghzAction(action) {
+  fetch('/flipper_subghz_tx', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({action})
+  }).then(res => res.json()).then(data => {
+    if (data.error) showError(data.error);
+    else showSuccess(data.result);
+  }).catch(err => showError('Network error'));
+}
+document.getElementById('custom-key-form').addEventListener('submit', e => {
+  e.preventDefault();
+  const key = document.getElementById('key-hex').value.trim();
+  if (!key) { showError('Key cannot be empty'); return; }
+  const data = {
+    action: 'custom_key',
+    key: key.toUpperCase(),
+    freq: document.getElementById('freq').value,
+    te: document.getElementById('te').value,
+    repeat: document.getElementById('repeat').value
+  };
+  fetch('/flipper_subghz_tx', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)})
+    .then(res => res.json()).then(result => {
+      if (result.error) showError(result.error);
+      else showSuccess(result.result);
+    }).catch(err => showError('Network error'));
+});
+document.getElementById('file-tx-form').addEventListener('submit', e => {
+  e.preventDefault();
+  const data = {
+    action: 'from_file',
+    path: document.getElementById('file-path').value,
+    repeat: document.getElementById('file-repeat').value
+  };
+  fetch('/flipper_subghz_tx', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)})
+    .then(res => res.json()).then(result => {
+      if (result.error) showError(result.error);
+      else showSuccess(result.result);
+    }).catch(err => showError('Network error'));
+});
+document.getElementById('raw-tx-form').addEventListener('submit', e => {
+  e.preventDefault();
+  const data = {
+    action: 'raw',
+    freq: document.getElementById('raw-freq').value,
+    raw_data: document.getElementById('raw-data').value.trim()
+  };
+  fetch('/flipper_subghz_tx', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)})
+    .then(res => res.json()).then(result => {
+      if (result.error) showError(result.error);
+      else showSuccess(result.result);
+    }).catch(err => showError('Network error'));
+});
+updateConnectionStatus();
+setInterval(updateConnectionStatus, 5000);
+
+// File Explorer logic
+function refreshFs() {
+  const p = document.getElementById('fs-path').value.trim() || '/ext';
+  fetch(`/flipper_fs/list?path=${encodeURIComponent(p)}`).then(r=>r.json()).then(d=>{
+    const listEl = document.getElementById('fs-list');
+    if (d.error) { listEl.textContent = d.error; return; }
+    const entries = (d.entries||[]).filter(x=>x && !/^storage list/.test(x) && x !== '>:' );
+    if (!entries.length) { listEl.textContent = 'No entries or unsupported firmware.'; return; }
+    const base = p.endsWith('/')? p : (p + '/');
+    listEl.innerHTML = entries.map(x=>{
+      const isDir = x.startsWith('[D]');
+      const name = x.replace(/^\[.[^\]]*\]\s*/, '').trim();
+      const full = base + name;
+      const click = isDir ? `document.getElementById('fs-path').value='${full}'; refreshFs();` : `document.getElementById('fs-file').value='${name}';`;
+      return `<div><a href="#" onclick="${click}">${isDir? '📁' : '📄'} ${name}</a></div>`;
+    }).join('');
+  }).catch(()=>{ document.getElementById('fs-list').textContent = 'Network error'; });
+}
+function navigateUp() {
+  let p = document.getElementById('fs-path').value.trim() || '/';
+  if (p === '/' || p === '') return;
+  const parts = p.split('/').filter(Boolean);
+  parts.pop();
+  const up = '/' + parts.join('/');
+  document.getElementById('fs-path').value = up || '/';
+  refreshFs();
+}
+function shareCurrentPath() {
+  const p = document.getElementById('fs-path').value.trim();
+  navigator.clipboard?.writeText(p);
+}
+function selectFromList(name) {
+  document.getElementById('fs-file').value = name;
+}
+function viewFile() {
+  const name = document.getElementById('fs-file').value.trim();
+  let base = document.getElementById('fs-path').value.trim() || '/';
+  if (!name) return;
+  const full = base.endsWith('/') ? (base + name) : (base + '/' + name);
+  fetch(`/flipper_fs/read?path=${encodeURIComponent(full)}`).then(r=>r.json()).then(d=>{
+    const title = document.getElementById('fileModalTitle');
+    const body = document.getElementById('fileModalBody');
+    title.textContent = full;
+    body.textContent = d.content || '(empty or unsupported)';
+    const modal = new bootstrap.Modal(document.getElementById('fileModal'));
+    modal.show();
+  });
+}
+function downloadFile() {
+  const name = document.getElementById('fs-file').value.trim();
+  let base = document.getElementById('fs-path').value.trim() || '/';
+  if (!name) return;
+  const full = base.endsWith('/') ? (base + name) : (base + '/' + name);
+  window.location.href = `/flipper_fs/download?path=${encodeURIComponent(full)}`;
+}
+function deleteFile() {
+  const name = document.getElementById('fs-file').value.trim();
+  let base = document.getElementById('fs-path').value.trim() || '/';
+  if (!name) return;
+  const full = base.endsWith('/') ? (base + name) : (base + '/' + name);
+  fetch('/flipper_fs/delete', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({path: full})})
+    .then(r=>r.json()).then(()=>refreshFs());
+}
+// Initial load
+refreshFs();
+</script>
+{% endblock %}

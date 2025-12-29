@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}WiFi Pineapple Control{% endblock %}
+{% block content %}
+<div class="container mt-4">
+  <h1>WiFi Pineapple — <span class="muted">Management</span></h1>
+  <style>
+    .typing { border-right: 2px solid var(--accent); animation: blink 1s steps(1) infinite; }
+    @keyframes blink { 50% { opacity: 0 } }
+  </style>
+  <div id="status" class="card mb-3">
+    <div class="card-body">
+      <h5 class="panel-title">Real-Time Status</h5>
+      <pre id="status-output" class="p-2 typewriter" style="background:#020518;color:#9ff;white-space:pre-wrap">Loading...</pre>
+      <div class="btn-group mt-2" role="group">
+        <button class="btn btn-outline-light" onclick="refreshPineappleStatus()">Refresh</button>
+        <button class="btn btn-outline-secondary" id="toggle-typewriter-pine">Disable typewriter</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-body">
+      <h5>Logs</h5>
+      <button class="btn btn-info" onclick="getPineappleLogs()">Fetch Logs</button>
+      <pre id="logs-output"></pre>
+    </div>
+  </div>
+  <div class="card mb-3">
+    <div class="card-body">
+      <h5>Notifications</h5>
+      <button class="btn btn-info" onclick="getPineappleNotifications()">Fetch Notifications</button>
+      <pre id="notifs-output"></pre>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <h5>Customize PineAP Settings</h5>
+      <form id="pineap-form">
+        <div class="form-check">
+          <input type="checkbox" id="enablePineAP" checked>
+          <label for="enablePineAP">Enable PineAP</label>
+        </div>
+        <div class="form-check">
+          <input type="checkbox" id="karma">
+          <label for="karma">Enable Karma</label>
+        </div>
+        <!-- Add more settings -->
+        <button type="submit" class="btn btn-success mt-2">Apply</button>
+      </form>
+      <pre id="settings-output"></pre>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <h5>Quick Actions</h5>
+      <button class="btn btn-warning" onclick="pineappleAction('/api/reboot', 'POST')">Reboot</button>
+      <button class="btn btn-danger" onclick="pineappleAction('/api/shutdown', 'POST')">Shutdown</button>
+      <!-- Add more -->
+    </div>
+  </div>
+</div>
+<script>
+let typewriterEnabledPine = true;
+function typewriterPrintP(el, text, speed=12) {
+  if (!el) return;
+  if (!typewriterEnabledPine) { el.textContent = text; el.classList.remove('typing'); return; }
+  if (el._tw_timer) { clearInterval(el._tw_timer); el._tw_timer = null; }
+  el.textContent = '';
+  el.classList.add('typing');
+  let i = 0;
+  el._tw_timer = setInterval(() => {
+    el.textContent += text.charAt(i);
+    i++;
+    if (i >= text.length) { clearInterval(el._tw_timer); el._tw_timer = null; el.classList.remove('typing'); }
+  }, speed);
+}
+
+function refreshPineappleStatus() {
+  fetch('/pineapple_status').then(res => res.json()).then(data => {
+    typewriterPrintP(document.getElementById('status-output'), JSON.stringify(data, null, 2));
+  });
+}
+function getPineappleLogs() {
+  fetch('/pineapple_logs').then(res => res.json()).then(data => {
+    typewriterPrintP(document.getElementById('logs-output'), JSON.stringify(data, null, 2));
+  });
+}
+function getPineappleNotifications() {
+  fetch('/pineapple_notifications').then(res => res.json()).then(data => {
+    typewriterPrintP(document.getElementById('notifs-output'), JSON.stringify(data, null, 2));
+  });
+}
+function pineappleAction(endpoint, method) {
+  fetch('/pineapple_status')  // Reuse status as example; adjust for actual actions
+    .then(res => res.json()).then(data => {
+      typewriterPrintP(document.getElementById('settings-output'), JSON.stringify(data, null, 2));
+    });
+}
+
+if (document.getElementById('toggle-typewriter-pine')) {
+  document.getElementById('toggle-typewriter-pine').addEventListener('click', () => {
+    const btn = document.getElementById('toggle-typewriter-pine');
+    typewriterEnabledPine = !typewriterEnabledPine;
+    btn.textContent = typewriterEnabledPine ? 'Disable typewriter' : 'Enable typewriter';
+  });
+}
+document.getElementById('pineap-form').addEventListener('submit', e => {
+  e.preventDefault();
+  const data = {
+    enablePineAP: document.getElementById('enablePineAP').checked,
+    karma: document.getElementById('karma').checked
+    // Add more
+  };
+  fetch('/pineapple_settings', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(data)
+  }).then(res => res.json()).then(result => {
+    document.getElementById('settings-output').textContent = JSON.stringify(result, null, 2);
+  });
+});
+refreshPineappleStatus();  // Initial load
+setInterval(refreshPineappleStatus, 5000);  // Poll every 5s
+</script>
+{% endblock %}
